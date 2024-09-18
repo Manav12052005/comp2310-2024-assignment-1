@@ -5,6 +5,8 @@
 
 ## Overview
 
+The memory allocator i have chose to implement is designed to efficiently manage dynamic memory allocations
+
 ## Optimisations 
 
 ## Testing
