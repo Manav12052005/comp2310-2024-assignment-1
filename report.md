@@ -61,6 +61,10 @@ usage scenarios.  I also ran fragmentation tests using random allocation and fre
 memory blocks effectively, keeping peak memory usage low at just 0.2162% of the total heap size, which is 67,108,864 bytes. There are no known bugs in the current version, 
 and the allocator consistently handles both regular and edge-case allocation requests without any issues.
 
+In the my_malloc function, after allocating memory and updating current_memory_usage, the allocator checks whether the new current_memory_usage exceeds the existing peak_memory_usage. If it does, peak_memory_usage is updated accordingly. Conversely, in the my_free function, when memory is freed, current_memory_usage is decremented, but peak_memory_usage remains unchanged as it represents the historical maximum usage.
+
+This straightforward approach allows the allocator to efficiently track peak memory utilization with minimal overhead, enabling effective performance analysis and optimization.
+
 ## Benchmarking
 
 The custom memory allocator went through a thorough evaluation with a bunch of benchmark scripts. It was tested 10 times, with each run averaging about 0.076 seconds, 
