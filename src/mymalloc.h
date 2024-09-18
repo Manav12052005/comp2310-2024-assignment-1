@@ -16,21 +16,16 @@
 
 #define ADD_BYTES(ptr, n) ((void *) (((char *) (ptr)) + (n)))
 
-
-/** This is the Block struct, which contains all metadata needed for your 
- *  explicit free list. You are allowed to modify this struct (and will need to 
- *  for certain optimisations) as long as you don't move the definition from 
- *  this file. **/
+// Block structure with a unified header and footer, utilizing boundary tags
 typedef struct Block Block;
 
 struct Block {
-  // Size of the block, including meta-data size.
-  size_t size;
-  // Next and Prev blocks
-  Block *next;
-  Block *prev;
-  // Is the block allocated or not?
-  bool allocated;
+    // Size of the block, including meta-data size and flags
+    size_t size;
+    // Next and Prev blocks in the free list (only used when the block is free)
+    Block *next;
+    Block *prev;
+    // The footer is not explicitly stored as a separate field; it uses the last 8 bytes of the block.
 };
 
 // Word alignment
@@ -48,13 +43,14 @@ void *my_malloc(size_t size);
 void my_free(void *p);
 
 /* Helper functions you are required to implement for internal testing. */
-
 int is_free(Block *block);
 size_t block_size(Block *block);
 
 Block *get_start_block(void); 
 Block *get_next_block(Block *block);
+Block *get_prev_block(Block *block);
 
 Block *ptr_to_block(void *ptr);
+size_t get_peak_memory_usage();
 
 #endif
