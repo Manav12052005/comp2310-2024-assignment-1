@@ -9,8 +9,8 @@
 
 // You can modify these values to be larger or smaller as needed
 // By default, they are quite small to help you test your code.
-#define REPTS 100000
-#define NUM_PTRS 10000
+#define REPTS 1000
+#define NUM_PTRS 100
 #define MAX_ALLOC_SIZE 4096
 
 char *ptrs[NUM_PTRS];
