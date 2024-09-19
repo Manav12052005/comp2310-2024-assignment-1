@@ -5,62 +5,125 @@
 
 ## Overview
 
-My memory allocator efficiently and dynamically allocates memory using a best fit strategy which works in combination with coalescence and fenceposts to reduce and limit the effect of fragmentation and subsequently optimises memory storage.
-It first initialises a heap of 64Mb which is of a fixed-size using the function mmap, which works as the primary memory pool for requested allocations.
-To handle varying sizes, the allocator employs multiple-free lists, each corresponding to different size classes. This allows for quicker access to better suited sized blocks that are free.
+The implementation of malloc() I have developed includes certain optimisations that allow for efficient and dynamic memory allocation. It uses a best-fit strategy along with coalescing and fenceposts to limit fragementation and thereby optimising memory storage.
+It first initialises the heap of 64Mb by using the function mmap, which in  my malloc is the primary memory pool for any requested allocations.
+The biggest optimisation I have implemented is that my malloc() uses multiple free lists to adhere to varying block-size requests. This makes 
+for faster access to the suitable-sized free blocks.
 
-At the core of my allocator is the Block structure, of which each contains metadata, such as size and flags which give information on allocation status, fenceposts, and whether the block has been allocated via mmap.
-The best fit strategy is based on searching through the suitably sized free list to find the smallest block that is able to satisfy the allocation request. This reduces wasted space.
-If the block is much larger than the allocation request, then it is split into two. The remaining portion is then added back to the list of free blocks.
+My Block datastructure forms the core of my malloc and it utilises metadata which consists of flags that rovide information on allocation status,
+existence of fenceposts and whether the block has been allocated by mmap.
+All of this metadata has been reduced to fit inside the last three bits of the header, hence saving memory that can be used for allocating more
+data. 
 
-To limit the effect of fragmentation, the allocator uses coalescing using boundary flags. When a block is freed, the allocator checks adjacent blocks (both previous and next) and merges any contiguous free blocks into a single larger block. 
-Larger contiguous memory regions remain hence remain available for future allocations. 
+Coming to coalescing, my malloc utilises boundary flags. The malloc checks adjacent blocks when a bolck becomes free (both prev and next) and
+merges any contigous free block in to a large compound single block.
+This way larger contigous blocks remain free for allocation.
+Boundaries are marked by using fenceposts at the end and the start of the heap so that memory outside the allocated region is not accessed.
+This data structure indicates clearly the heap's limits. 
 
-Fenceposts are put at the beginning and end of the heap to mark its boundaries. This is used to prevent the allocator from accessing memory outside the allocated heap region. 
-These blocks help to simplify the logic needed for coalescing by giving clear indicators of the heap's limits.
+Now when memory allocation requests that are bigger than what the memory we have access to can accomodate, i.e. it is greater than the heap size,
+my malloc allows for dynamic-extension of the heap by adding on more memory from the OS by using mmap.
 
-Furthermore, when big allocation requests surpass the initial heap size, the allocator allows dynamic heap extension by requesting additional memory from the operating system via mmap. 
-By using this technique, the allocator may manage big allocations without jeopardising the original heap's integrity.
 
 ## Optimisations 
 
-Metadata Reduction -
-To cut down on the extra memory used for each block, the allocator uses a streamlined Block structure that holds just the key metadata. 
-By designing the metadata to include only what’s needed—like size, whether it’s allocated, and pointers for free lists—the allocator keeps 
-the memory used per block to a minimum. This tweak means more of the heap can be used for actual data, improving memory usage overall. 
-Plus, by using bitwise flags in the size field, it can represent multiple states without taking up extra space, which boosts the efficiency of the metadata even more.
+Metadata Reduction:
+Cutting down on the memory used by each of the blocks, I implemented metadata reduction by putting together all the fields that were present
+in the metadata as separate into one consolidated size field. So, I used the 3 least significant bits of the size fields to be repurposed into
+encoding the allocation status (ALLOCATED_FLAG), fencepost status(FENCEPOST_FLAG) and mmap status(MMAP_FLAG). This reduced my overhead and my
+allocator was able to use more of the heap to store data.
 
-Constant Time Coalescing with Boundary Tags -
-The allocator implements constant time coalescing through the use of boundary tags, which are stored in both the header and footer of each block. 
-When a block is freed, the allocator can immediately determine the status of adjacent blocks by inspecting their footers and headers, respectively. 
-This approach eliminates the need for traversing the heap to find neighboring blocks, enabling rapid merging of free blocks. By ensuring that coalescing 
-operations occur in constant time, the allocator maintains quite high performance even under heavy allocation and deallocation workloads, effectively reducing fragmentation without incurring significant computational overhead.
+Constant Time Coalescing:
+This optimisation was done to prevent or reduce fragmentation, this is done by combining adjacent free blocks to form longer
+and bigger contigous block. This results in larger contigous blocks of memory hence reducing fragmentation as mentioned in the assignment.
+I have implemented constant time coalescing by using the prescirbed boundary tags, which come as storing data both at the beginning(header) and 
+at the end(footer) for each memory block. The footer of every block is the same as the header's size and info.
+The allocator, when a block is freed is able to instantly access the neigbours by referencing the footer of the previous block and the header
+of the next block. This direct access completely voids the need to go through the entire heap to find neighbouring blocks. This prevents the 
+O(n) complexit and optimises it to O(1).
 
-Requesting Additional Chunks from the OS -
-When big memory requests come in that go beyond the starting heap size, the allocator steps in and asks the operating system for more memory using mmap. 
-If a request is larger than a certain limit (like when the block size is bigger than what’s left in the heap), the allocator skips the free lists and goes 
-straight for a new memory area. These mmaped sections are kept track of separately to make sure the total heap size (Hk) is accurately recorded. 
-By keeping large allocations separate, the allocator helps avoid fragmentation in the initial heap and makes sure that big memory needs are met efficiently, without slowing down smaller requests.
+Requesting additional chunks from the OS:
+This optimisation is done to handle cases when allocation requests are unable to be accomodated by the initalised heap.
 
-Multiple Free Lists -
-The allocator has a bunch of free lists, each one for a different size, which makes it way easier to find the right free blocks quickly. 
-Instead of sifting through one big list, it can zoom in on blocks that are almost the right size, saving a lot of time. By organizing free 
-blocks into size-specific lists, the allocator makes the best fit method more efficient, focusing the search on just the relevant lists instead of the 
-entire heap. This setup not only cuts down on fragmentation but also boosts memory usage and speeds up the allocation process.
+There are 2 primary conditions, which are listed as follows,
+
+Exceeding Heap Inital Capacity:
+When the memory allocation request exceeeds the remaining space in the 64Mb heap, the allocator calls mmap again to obtain a new memory region.
+This prevents the possibility of the large request from causing fragementaton and makes for the original memory region being free for 
+shorter and more frequent allocations.
+
+Handling Large Allocation Requests:
+This is for allocation requests that are inherently large. For this case my malloc bypasses the available free lists and goest directly to 
+allocate the request by calling mmap. 
+
+The additional memory regions requested from mmap follow the same structure as the initial heap but doesn't exist in list form, it is 
+managed separately.
+
+The alignment function was used to maintain compliance for the extra memory with the rest of the heap in the malloc.
+
+
+Multiple Free Lists:
+The multiple free list optimisation categorises blocks into size classes. 
+
+This stratification allows for several advantages:
+
+Enhanced Allocation Speed - Due to having different size class based lists, traversing one list to find a free block big enough isn't required and
+a targeted search can be carried out to access the relevant free list thereby reducing the time complexity.
+
+Reduced Memory Fragmentation - By segregating blocks of different sizes, coalescing takes place more efficiently thereby reducing both internal 
+and external fragmentation. It also contributes to a high utilisation rate and longevity of the heap.
+
+Improved Scalability - As allocations grow it can bottleneck, leading to degraded performance, having multiple lists distributes workload across
+the different size based classes.
+
+Superior Best-Fit Selection - Multiple free lists paves the path for a more suitable and refined best-fit strategy within each size class. 
+This is due to the different size-based classses as it makes for minimal overhead.
+
+
+Enhanced Parallelism Potential
+Having multiple free lists can enhance opportunities for parallel processing and concurrency optimizations. By managing different 
+size classes separately, it becomes possible to perform searches and modifications in parallel without running into contention issues.
+
 
 ## Testing
 
-One of the biggest challenges I encountered while building the custom memory allocator was figuring out how to properly combine free blocks in a structure with multiple free lists. At first, managing just one free list was pretty simple, but as I expanded the allocator to handle multiple lists for different size categories, it got a lot trickier to keep each list intact during block splitting and merging. I ran into a tough bug where the free list pointers weren’t updating correctly during coalescing, which sometimes caused memory leaks or segmentation faults. I fixed this by carefully tracking the block pointers and making sure that both the next and previous references were consistently updated across all free lists after every operation.  To test how solid the allocator was, I ran a detailed set of 16 internal tests that looked at various situations like allocating zero bytes, managing large allocations, ensuring proper alignment, and checking how the allocator performed with random free patterns. All tests came through with flying colors, showing 16/16 tests passed; 0/16 tests failed; and 0/16 tests timed out. This thorough testing confirmed that the allocator works as it should across a variety of usage scenarios.  On top of that, I also ran fragmentation tests using random allocation and free sequences to see how well the allocator could reduce memory waste. The results showed that it managed memory blocks effectively, keeping the peak memory usage low at just 0.2162% of the total heap size of 67,108,864 bytes. This was made possible by tracking the highest memory usage during the allocator's operations. The allocator reliably handled both standard and edge-case allocation requests without any known issues, ensuring dependable performance.
+The biggest challenge I faced while making this malloc was the implementation of fenceposts and coalescing to prevent fragmentation.
+This issue manifested itself as memory leaks with extremely prevalent segmentation faults. Running the tests always lead to the address sanitiser giving a big error which was hard to decode. It caused the tests Simple2 and fragementation to fail. Sometimes, the fragmentation one would pass
+but not consistently. Upon searching through debugging documentation I nailed down the root cause to bee incorrect updating of my free list pointers
+during the coalescing process, which in large disrupted the integrity of my free lists and prevented the proper merging of blocks.
+This resulted in the absence of longer contigous blocks of memory being formed.
+To solve this I traced down the processing of my pointer and tracked their path and installed small checks wherein I could ensure they were being
+transferred properly and I also added a function to validate pointers.
+The designing and integration of fenceposts into the malloc was also a hefty task an I had to format their start and end functions while ensuring
+they did not interfere with the allocation and deallocation processes. 
+Specifically when attempting to merge free blocks the malloc oocasionally tried to access memory from  outside the fenceposts, leading to the 
+segmentation faults mentioned earlier.To address this, I put in place strict checks to make sure that coalescing operations adhered to the limits set by the fenceposts:   With these boundary checks in place, the allocator was able to merge free blocks safely without breaching the heap boundaries.
+Running the tests and examining their functionality really helped me to resolve these errors.
 
-In the my_malloc function, after allocating memory and updating current_memory_usage, the allocator checks whether the new current_memory_usage exceeds the existing peak_memory_usage. If it does, peak_memory_usage is updated accordingly. Conversely, in the my_free function, when memory is freed, current_memory_usage is decremented, but peak_memory_usage remains unchanged as it represents the historical maximum usage.
 ## Benchmarking
 
-The custom memory allocator went through a thorough testing process with a bunch of benchmark scripts. It was run 10 times, and each test averaged around 0.076 seconds with a slight variation of ±0.002 seconds. This consistent performance highlights how effective the allocator is at handling frequent memory requests using several free lists.  When we looked at the multiple free lists setup versus the older single free list method, a few important points stood out:  
+The malloc went under the benchmarking tests provided and yielded great results, I was able to reduce the average time from about 1.4 sec in my
+first iteration to only 0.076 sec in my final implementation.
+The optimisation that improved m results significantly was constant time coalescing which pretty much led to a tenfold decrease in the benchmarking.
+The uniformity of my results also indicate the consistency in terms of how memory is allocated dynamically and efficiently.
 
-Allocation Speed: The multiple free lists showed a bit faster allocation times because they could search specifically within size-related lists. With this setup, the allocator quickly found the best-fit block in the right size category without having to sift through one big list. This tweak made the allocation process smoother and quicker.  
+Peak Memory Utilization Metric:
+To gain deeper insight into my allocator's management capabilities, I implemented a peak utilisation metric function as described in the lecture slides. This was done by tracking the payload of allocated memory and identifying the peak usage during benchmark runs.
 
-Memory Fragmentation: The fragmentation stats were still looking good, with the allocator achieving a peak memory utilization of just 0.2162%. While a single free list can do the job, having multiple free lists really helps control fragmentation better by keeping blocks of similar sizes separate. This setup cuts down on internal fragmentation and makes sure memory is used more effectively, keeping peak utilization low.  
+The following are my tracking variables,
+current_memory_usage
+peak_memory_usage
 
-Optimizations: By using a best-fit search algorithm with the multiple free lists, memory usage improved significantly by minimizing wasted space. Plus, careful management of block metadata and alignment made sure memory was allocated and freed correctly, which helped keep performance stable. The reduced overhead from metadata and better handling of boundary tags also boosted the allocator's efficiency.  
+These metrics are updated in both my_malloc() and my_free(). Incrementing in malloc and decrementing in free respectively.
 
-In summary, the multiple free lists version of the custom memory allocator not only kept strong performance and low fragmentation but also improved memory management efficiency compared to the single free list method. These enhancements led to reliable and effective memory allocations, proving that a well-designed system makes a difference.
+A fragmentation script to test randomised allocations and deallocations was put in place in fragementation.c which tracked the current_payload
+and updated max_payload whenever a new peak was reached.
+
+The fragmentation tests revealed a peak memory utilization (Uk) of 0.2162%, relative to the total heap size of 67,108,864 bytes.
+
+This super low fragmentation rate shows just how good the allocator is at keeping big chunks of memory together, which cuts down on wasted space and boosts memory efficiency. By effectively merging free blocks through smart pointer management and fencepost techniques, it makes sure memory is used to its fullest, keeping performance high even when there are a lot of allocations and deallocations happening.
+
+I tried to benchmark my results against a lower iteration but I hadn't saved my previous work and wasn't able to remove the multiple free list 
+optimisation with enough time to test against it.
+
+But I do remember the results of my implementation and they were aprooximately 1.08 sec but other programs on my machine were also running during that period hence that could also be the reason for this big of a performance upgrade.
